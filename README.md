@@ -2,6 +2,10 @@
 
 Telegram бот для отслеживания тренировок и прогресса в силовых упражнениях.
 
+![Python](https://img.shields.io/badge/Python-3.9+-blue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue)
+![Docker](https://img.shields.io/badge/Docker-Container-green)
+
 ## 🚀 Возможности
 
 - **📋 Управление упражнениями** по категориям:
