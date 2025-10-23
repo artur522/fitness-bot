@@ -8,7 +8,12 @@ from datetime import date, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, InputMediaPhoto
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 from database import create_tables, get_exercises_by_category, add_exercise, delete_exercise, modify_exercise, add_workout, get_user_stats, get_workout_logs, get_workouts_by_user, delete_workout
+import os
+from dotenv import load_dotenv
+from database import create_tables, get_exercises_by_category, add_exercise, delete_exercise, modify_exercise, add_workout, get_user_stats, get_workout_logs, get_workouts_by_user, delete_workout, delete_all_workouts
 
+# Загружаем переменные из .env файла
+load_dotenv()
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 def escape_markdown_v2(text):
@@ -23,7 +28,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("💪 Грудь и бицепс", callback_data='chest_biceps')],
         [InlineKeyboardButton("🏋️‍♂️ Спина и трицепс", callback_data='back_triceps')],
         [InlineKeyboardButton("🦵 Ноги и плечи", callback_data='legs_shoulders')],
-        [InlineKeyboardButton("📊 Статистика", callback_data='statistics')]
+        [InlineKeyboardButton("📊 Статистика", callback_data='statistics')],
+        [InlineKeyboardButton("⚙️ Настройки", callback_data='settings')]
     ])
     main_menu = ReplyKeyboardMarkup([["/start", "📊 Статистика"]], resize_keyboard=True)
     text = escape_markdown_v2("❚█══█❚ Начинаем качалку! ❚█══█❚") + "\n" + escape_markdown_v2("Выбери категорию или раздел:")
@@ -31,6 +37,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
     else:
         await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
+
+async def settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    default_reps = context.user_data.get('default_reps', 8)
+    
+    reply_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"🔄 Повторений за подход: {default_reps}", callback_data='change_reps')],
+        [InlineKeyboardButton("🔙 Назад", callback_data='back')]
+    ])
+    
+    await query.edit_message_text(
+        escape_markdown_v2("⚙️ Настройки тренировки:"),
+        reply_markup=reply_markup,
+        parse_mode='MarkdownV2'
+    )
+
+async def change_reps_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data['action'] = 'change_reps'
+    await query.edit_message_text(
+        escape_markdown_v2("Введи количество повторений за подход (например, 8, 10, 12):"),
+        parse_mode='MarkdownV2'
+    )
 
 async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -156,21 +190,24 @@ async def select_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     exercises = get_exercises_by_category(category)
     exercise = next((ex for ex in exercises if ex[0] == ex_id), None)
     if not exercise:
-        await query.edit_message_text(escape_markdown_v2("⛔ Упражнение не найдено."), parse_mode='MarkdownV2')
+        await query.edit_message_text("⛔ Упражнение не найдено.")
         return
     context.user_data['exercise'] = exercise
     context.user_data['sets'] = []
+    
     weights = [w.strip() for w in exercise[2].split(',')]
-    buttons = [[InlineKeyboardButton(f"{escape_markdown_v2(w)} кг", callback_data=f'addset_{w}')] for w in weights]
+    buttons = [[InlineKeyboardButton(f"{w} кг", callback_data=f'addset_{w}')] for w in weights]
     buttons.append([InlineKeyboardButton("➕ Свой вес", callback_data='custom_weight')])
     buttons.append([InlineKeyboardButton("✅ Завершить", callback_data='finish_sets')])
     buttons.append([InlineKeyboardButton("🔙 Назад", callback_data='do_workout')])
+    
     await query.edit_message_text(
-        f"{escape_markdown_v2('🏋 Упражнение:')} *{escape_markdown_v2(exercise[1])}*\n\n"
-        f"{escape_markdown_v2('Выбери вес — каждый клик = подход 💥')}\n\n"
-        f"{escape_markdown_v2('Нажми «✅ Завершить» для сохранения.')}",
-        reply_markup=InlineKeyboardMarkup(buttons),
-        parse_mode='MarkdownV2'
+        f"🏋 Упражнение: {exercise[1]}\n\n"
+        f"Отмеченные подходы:\n"
+        f"Пока нет подходов\n\n"
+        f"Выбери вес — каждый клик = подход 💥\n"
+        f"Нажми «✅ Завершить» для сохранения.",
+        reply_markup=InlineKeyboardMarkup(buttons)
     )
 
 async def add_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,18 +218,24 @@ async def add_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sets.append(weight)
     context.user_data['sets'] = sets
     exercise = context.user_data['exercise']
-    buttons = [[InlineKeyboardButton(f"{escape_markdown_v2(w)} кг", callback_data=f'addset_{w}')]
+    
+    # Формируем список подходов (без Markdown)
+    sets_text = ""
+    for i, set_weight in enumerate(sets, 1):
+        sets_text += f"{i}. {set_weight} кг\n"
+    
+    buttons = [[InlineKeyboardButton(f"{w} кг", callback_data=f'addset_{w}')]
                for w in exercise[2].split(',')]
     buttons.append([InlineKeyboardButton("➕ Свой вес", callback_data='custom_weight')])
     buttons.append([InlineKeyboardButton("✅ Завершить", callback_data='finish_sets')])
     buttons.append([InlineKeyboardButton("🔙 Назад", callback_data='do_workout')])
+    
     await query.edit_message_text(
-        f"{escape_markdown_v2('🏋')} *{escape_markdown_v2(exercise[1])}*\n\n"
-        f"{escape_markdown_v2(f'Подходов: {len(sets)}')}\n"
-        f"{escape_markdown_v2(f'Последний вес: {weight} кг')}\n\n"
-        f"{escape_markdown_v2('Выбери вес или «✅ Завершить».')}",
-        reply_markup=InlineKeyboardMarkup(buttons),
-        parse_mode='MarkdownV2'
+        f"🏋 Упражнение: {exercise[1]}\n\n"
+        f"Отмеченные подходы:\n"
+        f"{sets_text}\n"
+        f"Выбери вес для следующего подхода:",
+        reply_markup=InlineKeyboardMarkup(buttons)
     )
 
 async def custom_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -210,24 +253,32 @@ async def finish_sets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not sets:
         await query.edit_message_text(escape_markdown_v2("❗ Подходы не отмечены."), parse_mode='MarkdownV2')
         return
+    
+    default_reps = context.user_data.get('default_reps', 8)
     category = context.user_data.get('category')
+    
     for weight in sets:
-        add_workout(user_id, exercise[1], 10, weight, category)
+        add_workout(0, exercise[1], default_reps, weight, category) # user_id = 0
+    
     weights_str = ', '.join(escape_markdown_v2(str(w)) for w in sets)
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data='do_workout')]])
+    
+    saved_category = context.user_data.get('category')
+    context.user_data.clear()
+    context.user_data['category'] = saved_category
+    
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data='back_to_cat')]])
     await query.edit_message_text(
         f"{escape_markdown_v2('✅')} *{escape_markdown_v2(exercise[1])}*\n\n"
         f"{escape_markdown_v2(f'Подходов: {len(sets)}')}\n"
+        f"{escape_markdown_v2(f'Повторений за подход: {default_reps}')}\n"
         f"{escape_markdown_v2(f'Веса:')} {weights_str} {escape_markdown_v2('кг')}",
         reply_markup=reply_markup,
         parse_mode='MarkdownV2'
     )
-    context.user_data.clear()
 
 async def statistics_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    # Delete previous stat messages if they exist
     if 'stat_messages' in context.user_data:
         for msg_id in context.user_data['stat_messages']:
             try:
@@ -250,7 +301,7 @@ async def delete_workout_handler(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
     start_date = (date.today() - timedelta(days=365)).isoformat()
     end_date = date.today().isoformat()
-    workouts = get_workouts_by_user(user_id, start_date, end_date)
+    workouts = get_workouts_by_user(0, start_date, end_date) # user_id = 0
     if not workouts:
         await query.edit_message_text(
             escape_markdown_v2("⛔ Нет записей для удаления."),
@@ -258,15 +309,50 @@ async def delete_workout_handler(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode='MarkdownV2'
         )
         return
+    
+    # Добавляем кнопку удаления всех записей
     buttons = []
     for workout in workouts:
         workout_id, exercise_name, weight, reps, workout_date = workout
         button_text = f"{escape_markdown_v2(exercise_name)}: {escape_markdown_v2(weight)} кг, {reps} повт., {escape_markdown_v2(workout_date)}"
         buttons.append([InlineKeyboardButton(button_text, callback_data=f'delete_workout_{workout_id}')])
+    
+    # Кнопка удаления всех записей
+    buttons.append([InlineKeyboardButton("🗑️ УДАЛИТЬ ВСЕ ЗАПИСИ", callback_data='delete_all_workouts')])
     buttons.append([InlineKeyboardButton("🔙 Назад", callback_data='statistics')])
+    
     await query.edit_message_text(
-        escape_markdown_v2("Выбери запись для удаления:"),
+        escape_markdown_v2("Выбери запись для удаления или удали все:"),
         reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode='MarkdownV2'
+    )
+    
+async def delete_all_workouts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    # Кнопки подтверждения
+    reply_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ ДА, УДАЛИТЬ ВСЁ", callback_data='confirm_delete_all')],
+        [InlineKeyboardButton("❌ ОТМЕНА", callback_data='delete_workout')]
+    ])
+    
+    await query.edit_message_text(
+        escape_markdown_v2("⚠️ ВЫ УВЕРЕНЫ? Это удалит ВСЕ записи тренировок безвозвратно!"),
+        reply_markup=reply_markup,
+        parse_mode='MarkdownV2'
+    )
+    
+async def confirm_delete_all_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    # Удаляем все записи (для всех пользователей)
+    delete_all_workouts()
+    
+    await query.edit_message_text(
+        escape_markdown_v2("✅ Все записи тренировок удалены для всех пользователей!"),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data='statistics')]]),
         parse_mode='MarkdownV2'
     )
 
@@ -299,11 +385,11 @@ async def display_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     categories = ["Грудь и бицепс", "Спина и трицепс", "Ноги и плечи"]
     stat_messages = []
     for cat in categories:
-        text = get_user_stats(user_id, start_date, end_date, cat)
+        text = get_user_stats(0, start_date, end_date, cat) # user_id = 0
         exercises = get_exercises_by_category(cat)
         media = []
         for ex in exercises:
-            logs = get_workout_logs(user_id, ex[1], start_date, end_date, cat)
+            logs = get_workout_logs(0, ex[1], start_date, end_date, cat) # user_id = 0
             if logs:
                 graph = generate_progress_graph(ex[1], logs, period_text)
                 if graph:
@@ -354,18 +440,24 @@ async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['sets'] = sets
             context.user_data['action'] = None
             exercise = context.user_data['exercise']
-            buttons = [[InlineKeyboardButton(f"{escape_markdown_v2(w)} кг", callback_data=f'addset_{w}')]
+            
+            # Формируем список подходов (без Markdown)
+            sets_text = ""
+            for i, set_weight in enumerate(sets, 1):
+                sets_text += f"{i}. {set_weight} кг\n"
+            
+            buttons = [[InlineKeyboardButton(f"{w} кг", callback_data=f'addset_{w}')]
                        for w in exercise[2].split(',')]
             buttons.append([InlineKeyboardButton("➕ Свой вес", callback_data='custom_weight')])
             buttons.append([InlineKeyboardButton("✅ Завершить", callback_data='finish_sets')])
             buttons.append([InlineKeyboardButton("🔙 Назад", callback_data='do_workout')])
+            
             await update.message.reply_text(
-                f"{escape_markdown_v2('🏋')} *{escape_markdown_v2(exercise[1])}*\n\n"
-                f"{escape_markdown_v2(f'Подходов: {len(sets)}')}\n"
-                f"{escape_markdown_v2(f'Последний вес: {weight} кг')}\n\n"
-                f"{escape_markdown_v2('Выбери вес или «✅ Завершить».')}",
-                reply_markup=InlineKeyboardMarkup(buttons),
-                parse_mode='MarkdownV2'
+                f"🏋 Упражнение: {exercise[1]}\n\n"
+                f"Отмеченные подходы:\n"
+                f"{sets_text}\n"
+                f"Выбери вес для следующего подхода:",
+                reply_markup=InlineKeyboardMarkup(buttons)
             )
         elif action == 'add':
             if 'new_exercise' not in context.user_data:
@@ -378,7 +470,7 @@ async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 weights = [float(w.strip()) for w in update.message.text.split(',')]
                 new_exercise = context.user_data['new_exercise']
                 add_exercise(category, new_exercise, ', '.join(map(str, weights)))
-                weight_str = ', '.join(map(str, weights))  # ОТДЕЛЬНАЯ СТРОКА
+                weight_str = ', '.join(map(str, weights))
                 await update.message.reply_text(
                     f"{escape_markdown_v2(f'Упражнение {new_exercise} добавлено: {weight_str} кг')} ✅",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✔ ОК", callback_data='back_to_cat')]]),
@@ -389,7 +481,7 @@ async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif action == 'modify':
             weights = [float(w.strip()) for w in update.message.text.split(',')]
             modify_exercise(context.user_data['exercise_id'], ', '.join(map(str, weights)))
-            weight_str = ', '.join(map(str, weights))  # ОТДЕЛЬНАЯ СТРОКА
+            weight_str = ', '.join(map(str, weights))
             await update.message.reply_text(
                 f"{escape_markdown_v2(f'Упражнение обновлено: {weight_str} кг')} ✅",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✔ ОК", callback_data='back_to_cat')]]),
@@ -416,8 +508,18 @@ async def back_to_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await statistics_handler(update, context)
 
 def main():
-    app = ApplicationBuilder().token("6340215688:AAGcrYys_BBVDPjMayWhp0Og2kOVMyBbHc8").build()
+    token = os.environ.get('BOT_TOKEN')
+    
+    if not token:
+        logging.error("❌ BOT_TOKEN not found in environment variables")
+        print("❌ BOT_TOKEN not found in environment variables")
+        return
+    
+    app = ApplicationBuilder().token(token).build()
+    
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(settings_handler, pattern='^settings$'))
+    app.add_handler(CallbackQueryHandler(change_reps_handler, pattern='^change_reps$'))
     app.add_handler(CallbackQueryHandler(category_handler, pattern='^(chest_biceps|back_triceps|legs_shoulders)$'))
     app.add_handler(CallbackQueryHandler(edit_exercise_handler, pattern='^edit_exercise$'))
     app.add_handler(CallbackQueryHandler(add_exercise_handler, pattern='^add_exercise$'))
@@ -433,12 +535,17 @@ def main():
     app.add_handler(CallbackQueryHandler(statistics_handler, pattern='^statistics$'))
     app.add_handler(CallbackQueryHandler(delete_workout_handler, pattern='^delete_workout$'))
     app.add_handler(CallbackQueryHandler(confirm_delete_workout, pattern='^delete_workout_\\d+$'))
+    app.add_handler(CallbackQueryHandler(delete_all_workouts_handler, pattern='^delete_all_workouts$'))
+    app.add_handler(CallbackQueryHandler(confirm_delete_all_handler, pattern='^confirm_delete_all$'))
+    app.add_handler(CallbackQueryHandler(delete_all_workouts_handler, pattern='^delete_all_workouts$'))
+    app.add_handler(CallbackQueryHandler(confirm_delete_all_handler, pattern='^confirm_delete_all$'))
     app.add_handler(CallbackQueryHandler(display_stats, pattern='^stats_(month|halfyear|year)$'))
     app.add_handler(CallbackQueryHandler(back, pattern='^back$'))
     app.add_handler(CallbackQueryHandler(back_to_cat, pattern='^back_to_cat$'))
     app.add_handler(CallbackQueryHandler(back_to_stats, pattern='^stats_cat$'))
-    # УДАЛИТЬ эту строку: app.add_handler(CallbackQueryHandler(display_exercises, pattern='^page_\\d+$'))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_input))
+    
+    logging.info("Bot started!")
     app.run_polling()
 
 if __name__ == "__main__":
