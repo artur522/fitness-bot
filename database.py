@@ -24,13 +24,14 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS workouts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
             exercise_name TEXT,
             reps INTEGER,
             weight REAL,
             date TEXT,
             category TEXT
         )
-    ''')  # Убираем user_id
+    ''')
     conn.commit()
     conn.close()
 
@@ -79,7 +80,7 @@ def add_workout(user_id, exercise_name, reps, weight, category):
     cursor.execute('''
         INSERT INTO workouts (user_id, exercise_name, reps, weight, date, category)
         VALUES (?, ?, ?, ?, ?, ?)
-    ''', (0, exercise_name, reps, weight, datetime.date.today().isoformat(), category))  # user_id = 0 для всех
+    ''', (user_id, exercise_name, reps, weight, datetime.date.today().isoformat(), category))
     conn.commit()
     conn.close()
 
@@ -89,12 +90,12 @@ def get_user_stats(user_id, start_date, end_date, category=None):
     query = '''
         SELECT exercise_name, COUNT(*), AVG(weight), SUM(reps)
         FROM workouts 
-        WHERE date BETWEEN ? AND ?
+        WHERE date BETWEEN ? AND ? AND user_id = ?
     '''
-    params = (start_date, end_date)
+    params = (start_date, end_date, user_id)
     if category and category != 'general':
         query += ' AND category = ?'
-        params = (start_date, end_date, category)
+        params = (start_date, end_date, user_id, category)
     query += ' GROUP BY exercise_name'
     cursor.execute(query, params)
     data = cursor.fetchall()
@@ -115,12 +116,12 @@ def get_workout_logs(user_id, exercise_name, start_date, end_date, category=None
     query = '''
         SELECT date, weight, reps 
         FROM workouts 
-        WHERE exercise_name = ? AND date BETWEEN ? AND ?
+        WHERE exercise_name = ? AND date BETWEEN ? AND ? AND user_id = ?
     '''
-    params = (exercise_name, start_date, end_date)
+    params = (exercise_name, start_date, end_date, user_id)
     if category and category != 'general':
         query += ' AND category = ?'
-        params = (exercise_name, start_date, end_date, category)
+        params = (exercise_name, start_date, end_date, user_id, category)
     cursor.execute(query, params)
     logs = cursor.fetchall()
     conn.close()
@@ -132,12 +133,12 @@ def get_workouts_by_user(user_id, start_date, end_date, category=None):
     query = '''
         SELECT id, exercise_name, weight, reps, date
         FROM workouts 
-        WHERE date BETWEEN ? AND ? 
+        WHERE date BETWEEN ? AND ? AND user_id = ?
     '''
-    params = (start_date, end_date)
+    params = (start_date, end_date, user_id)
     if category and category != 'general':
         query += ' AND category = ?'
-        params = (start_date, end_date, category)
+        params = (start_date, end_date, user_id, category)
     query += ' ORDER BY date DESC'
     cursor.execute(query, params)
     workouts = cursor.fetchall()
@@ -152,9 +153,9 @@ def delete_workout(workout_id):
     conn.close()
     
 def delete_all_workouts():
-    """Удаляет все записи тренировок (для всех пользователей)"""
+    """Удаляет все записи тренировок"""
     conn = sqlite3.connect('workouts.db')
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM workouts')  # Удаляем всё
+    cursor.execute('DELETE FROM workouts')
     conn.commit()
     conn.close()
