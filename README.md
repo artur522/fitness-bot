@@ -176,18 +176,3 @@ MIT License
 
 **Примечание**: Для работы бота необходим токен, который можно получить у [@BotFather](https://t.me/BotFather) в Telegram.
 ```
-
-Этот README.md содержит:
-- Полное описание функционала
-- Инструкции по установке и запуску
-- Docker конфигурацию
-- Структуру проекта
-- Информацию для разработчиков
-
-Теперь можете добавить его в репозиторий:
-
-```bash
-git add README.md
-git commit -m "docs: add comprehensive README.md"
-git push origin main
-```
