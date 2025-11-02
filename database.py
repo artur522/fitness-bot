@@ -24,13 +24,21 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS workouts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+<<<<<<< HEAD
+=======
+            user_id INTEGER,
+>>>>>>> cf10e82f7b2ae24b524ef957a1d23b756407e3fd
             exercise_name TEXT,
             reps INTEGER,
             weight REAL,
             date TEXT,
             category TEXT
         )
+<<<<<<< HEAD
     ''')  # Убираем user_id
+=======
+    ''')
+>>>>>>> cf10e82f7b2ae24b524ef957a1d23b756407e3fd
     conn.commit()
     conn.close()
 
@@ -79,7 +87,11 @@ def add_workout(user_id, exercise_name, reps, weight, category):
     cursor.execute('''
         INSERT INTO workouts (user_id, exercise_name, reps, weight, date, category)
         VALUES (?, ?, ?, ?, ?, ?)
+<<<<<<< HEAD
     ''', (0, exercise_name, reps, weight, datetime.date.today().isoformat(), category))  # user_id = 0 для всех
+=======
+    ''', (user_id, exercise_name, reps, weight, datetime.date.today().isoformat(), category))
+>>>>>>> cf10e82f7b2ae24b524ef957a1d23b756407e3fd
     conn.commit()
     conn.close()
 
@@ -89,12 +101,21 @@ def get_user_stats(user_id, start_date, end_date, category=None):
     query = '''
         SELECT exercise_name, COUNT(*), AVG(weight), SUM(reps)
         FROM workouts 
+<<<<<<< HEAD
         WHERE date BETWEEN ? AND ?
     '''
     params = (start_date, end_date)
     if category and category != 'general':
         query += ' AND category = ?'
         params = (start_date, end_date, category)
+=======
+        WHERE date BETWEEN ? AND ? AND user_id = ?
+    '''
+    params = (start_date, end_date, user_id)
+    if category and category != 'general':
+        query += ' AND category = ?'
+        params = (start_date, end_date, user_id, category)
+>>>>>>> cf10e82f7b2ae24b524ef957a1d23b756407e3fd
     query += ' GROUP BY exercise_name'
     cursor.execute(query, params)
     data = cursor.fetchall()
@@ -115,12 +136,21 @@ def get_workout_logs(user_id, exercise_name, start_date, end_date, category=None
     query = '''
         SELECT date, weight, reps 
         FROM workouts 
+<<<<<<< HEAD
         WHERE exercise_name = ? AND date BETWEEN ? AND ?
     '''
     params = (exercise_name, start_date, end_date)
     if category and category != 'general':
         query += ' AND category = ?'
         params = (exercise_name, start_date, end_date, category)
+=======
+        WHERE exercise_name = ? AND date BETWEEN ? AND ? AND user_id = ?
+    '''
+    params = (exercise_name, start_date, end_date, user_id)
+    if category and category != 'general':
+        query += ' AND category = ?'
+        params = (exercise_name, start_date, end_date, user_id, category)
+>>>>>>> cf10e82f7b2ae24b524ef957a1d23b756407e3fd
     cursor.execute(query, params)
     logs = cursor.fetchall()
     conn.close()
@@ -132,12 +162,21 @@ def get_workouts_by_user(user_id, start_date, end_date, category=None):
     query = '''
         SELECT id, exercise_name, weight, reps, date
         FROM workouts 
+<<<<<<< HEAD
         WHERE date BETWEEN ? AND ? 
     '''
     params = (start_date, end_date)
     if category and category != 'general':
         query += ' AND category = ?'
         params = (start_date, end_date, category)
+=======
+        WHERE date BETWEEN ? AND ? AND user_id = ?
+    '''
+    params = (start_date, end_date, user_id)
+    if category and category != 'general':
+        query += ' AND category = ?'
+        params = (start_date, end_date, user_id, category)
+>>>>>>> cf10e82f7b2ae24b524ef957a1d23b756407e3fd
     query += ' ORDER BY date DESC'
     cursor.execute(query, params)
     workouts = cursor.fetchall()
@@ -152,9 +191,16 @@ def delete_workout(workout_id):
     conn.close()
     
 def delete_all_workouts():
+<<<<<<< HEAD
     """Удаляет все записи тренировок (для всех пользователей)"""
     conn = sqlite3.connect('workouts.db')
     cursor = conn.cursor()
     cursor.execute('DELETE FROM workouts')  # Удаляем всё
+=======
+    """Удаляет все записи тренировок"""
+    conn = sqlite3.connect('workouts.db')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM workouts')
+>>>>>>> cf10e82f7b2ae24b524ef957a1d23b756407e3fd
     conn.commit()
     conn.close()
