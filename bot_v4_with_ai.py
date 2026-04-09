@@ -83,8 +83,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     text = (
-        escape_markdown_v2("💪 ФИТНЕС-БОТ v4.0\n\n")
-        escape_markdown_v2(f"Привет, {username}!\n\n")
+        escape_markdown_v2("💪 ФИТНЕС-БОТ v4.0\n\n") +
+        escape_markdown_v2(f"Привет, {username}!\n\n") +
         escape_markdown_v2("Выбери категорию:")
     )
     
