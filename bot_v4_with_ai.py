@@ -17,7 +17,7 @@ load_dotenv()
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
 
 def escape_markdown_v2(text):
     chars = '_*[]()~`>#+-=|{}.!'
